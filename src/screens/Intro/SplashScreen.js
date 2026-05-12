@@ -16,8 +16,8 @@ const SplashScreen = ({ navigation }) => {
 
     return (
         <Flex jusContent="center" algItems="center" flex={1} extraStyle={styles.container}>
-            <Animated.View entering={BounceIn} exiting={BounceOut} >
-                <Image source={Images.logo} style={styles.logo} />
+            <Animated.View entering={BounceIn} exiting={BounceOut} style={styles.logoContainer}>
+                <Image source={Images.friedChickLogo} style={styles.logo} resizeMode='contain' />
             </Animated.View>
         </Flex>
     )
@@ -29,8 +29,12 @@ const styles = StyleSheet.create({
     container: {
         backgroundColor: COLORS.white,
     },
+    logoContainer: {
+        width: 200,
+        height: 200,
+    },
     logo: {
-        width: 180,
-        height: 180,
+        width: '100%',
+        height: '100%',
     },
 })
