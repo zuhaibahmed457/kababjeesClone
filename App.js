@@ -2,14 +2,16 @@ import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
 import {
   SafeAreaProvider,
 } from 'react-native-safe-area-context';
-
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RootNavigator from './src/navigation/RootNavigator';
 
 function App() {
 
   return (
     <SafeAreaProvider>
-      <RootNavigator />
+      <GestureHandlerRootView>
+        <RootNavigator />
+      </GestureHandlerRootView>
     </SafeAreaProvider>
   );
 }

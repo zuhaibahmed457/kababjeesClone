@@ -4,8 +4,12 @@ import Sizer from '../helpers/Sizer';
 const BASEOPACITY = 0.5;
 
 const COLORS = {
+    primary: '#ed2221',
     white: '#FFFFFF',
     black100: '#000000',
+
+    redLight: '#ef9494',
+    grey: '#505050',
 };
 
 export const statusBarHeight =
