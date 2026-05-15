@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ImageBackground, InteractionManager, Pressable, StyleSheet, View } from 'react-native'
+import React, { useCallback, useEffect, useRef, useState, useMemo, memo } from 'react'
+import { ImageBackground, Pressable, StyleSheet, View, Image, FlatList } from 'react-native'
 
 import Carousel from 'react-native-reanimated-carousel'
 import Animated, {
@@ -9,9 +9,9 @@ import Animated, {
     useAnimatedReaction,
     useAnimatedRef,
     useAnimatedStyle,
-    useScrollOffset,
     useSharedValue,
     withTiming,
+    useAnimatedScrollHandler,
 } from 'react-native-reanimated'
 
 import { HomeHeader } from '../../../components'
@@ -20,213 +20,269 @@ import { COLORS, WINDOW } from '../../../globalStyle/Theme'
 
 import Images from '../../../assets'
 import Sizer from '../../../helpers/Sizer'
+import { menuResponse } from '../../../api/menuApi'
 
-const SPY_INSET = Sizer.hSize(8)
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList)
+const SPY_INSET = Sizer.hSize(12)
 
-const SECTIONS = [
-    { key: 'featured', title: 'Featured' },
-    { key: 'popular', title: 'Popular' },
-    { key: 'offers', title: 'Offers' },
-    { key: 'desserts', title: 'Desserts' },
-    { key: 'drinks', title: 'Drinks' },
-]
+// Memoized Tab Component
+const TabItem = memo(({ title, isActive, onPress, onLayout }) => (
+    <Pressable style={styles.tab} onPress={onPress} onLayout={onLayout}>
+        <Typography
+            size={14}
+            fFamily={isActive ? 'bold' : 'medium'}
+            color={isActive ? COLORS.primary : COLORS.grey}
+        >
+            {title}
+        </Typography>
+    </Pressable>
+))
 
-/** Shared layout Y for each vertical section (spy). Length must match SECTIONS. */
-function useSectionTopSharedValues(count) {
-    const s0 = useSharedValue(0)
-    const s1 = useSharedValue(-1)
-    const s2 = useSharedValue(-1)
-    const s3 = useSharedValue(-1)
-    const s4 = useSharedValue(-1)
-    const arr = [s0, s1, s2, s3, s4]
-    if (count > arr.length) {
-        throw new Error(`HomeScreen supports at most ${arr.length} sections`)
-    }
-    return arr.slice(0, count)
-}
+// Memoized TabsRow Component
+const TabsRow = memo(({ sections, activeSection, onScrollTo, onLayout, tabMetrics, tabRowWidth, indicatorStyle, tabsScrollRef }) => {
+    return (
+        <View style={styles.stickyTabHost} onLayout={onLayout}>
+            <Animated.ScrollView
+                ref={tabsScrollRef}
+                horizontal
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                bounces={false}
+                contentContainerStyle={styles.tabScrollContent}
+            >
+                <View
+                    style={styles.tabRow}
+                    onLayout={(e) => {
+                        tabRowWidth.value = e.nativeEvent.layout.width
+                    }}
+                >
+                    {sections.map((s, i) => (
+                        <TabItem
+                            key={s.key}
+                            title={s.title}
+                            isActive={activeSection === i}
+                            onPress={() => onScrollTo(i)}
+                            onLayout={(e) => {
+                                const { x, width } = e.nativeEvent.layout
+                                const updated = [...tabMetrics.value]
+                                updated[i] = { x, width }
+                                tabMetrics.value = updated
+                            }}
+                        />
+                    ))}
+                    <Animated.View pointerEvents="none" style={[styles.indicator, indicatorStyle]} />
+                </View>
+            </Animated.ScrollView>
+        </View>
+    )
+})
+
+const SectionBanner = memo(({ banner }) => (
+    <View style={styles.sectionBannerContainer}>
+        <Image
+            source={{ uri: banner }}
+            style={styles.sectionBannerImage}
+            resizeMode="contain"
+        />
+    </View>
+))
+
+const ProductCard = memo(({ product }) => (
+    <View style={styles.section}>
+        <View style={styles.itemCard}>
+            <View style={styles.itemInfo}>
+                <Typography size={22} fWeight="700" transform="uppercase" numberOfLines={2}>
+                    {product.item_name}
+                </Typography>
+                <Typography size={12} color={COLORS.grey} mT={6} numberOfLines={3}>
+                    {product.item_description}
+                </Typography>
+                <Typography size={18} color={COLORS.primary} fWeight="700" mT={12}>
+                    {product.prices[0]?.pretty_price}
+                </Typography>
+            </View>
+            <View style={styles.imageWrapper}>
+                <Image
+                    source={{ uri: product.photo }}
+                    style={styles.itemImage}
+                />
+                <Pressable style={styles.addButton}>
+                    <Typography size={18} color={COLORS.white} fFamily="bold">+</Typography>
+                </Pressable>
+            </View>
+        </View>
+    </View>
+))
 
 const HomeScreen = () => {
     const scrollRef = useAnimatedRef()
     const tabsScrollRef = useAnimatedRef()
-    const scrollY = useScrollOffset(scrollRef)
+    const scrollY = useSharedValue(0)
+
+    // Programmatic scroll control
+    const isProgrammaticScroll = useSharedValue(false)
+    const targetSection = useSharedValue(-1)
+
+    const SECTIONS = useMemo(() => {
+        const seen = new Set()
+        const filtered = []
+        Object.values(menuResponse.details).forEach(cat => {
+            const cleanTitle = cat.title.trim().replace(/\.$/, '').toLowerCase()
+            if (!seen.has(cleanTitle)) {
+                seen.add(cleanTitle)
+                filtered.push({
+                    key: cat.id,
+                    title: cat.title.trim().replace(/\.$/, ''),
+                    banner: cat.image,
+                    items: Object.values(cat.items || {}),
+                })
+            }
+        })
+        return filtered
+    }, [])
 
     const [activeSection, setActiveSection] = useState(0)
-    const sectionTopsRef = useRef(SECTIONS.map(() => null))
-    const tabMetricsRef = useRef(SECTIONS.map(() => ({ x: 0, width: 0 })))
-    const tabRowWidthRef = useRef(0)
+    const sectionYs = useSharedValue(new Array(SECTIONS.length).fill(-1))
+    const sectionTopsRef = useRef(new Array(SECTIONS.length).fill(null))
 
-    const sectionYs = useSectionTopSharedValues(SECTIONS.length)
+    const tabMetrics = useSharedValue(SECTIONS.map(() => ({ x: 0, width: 0 })))
+    const tabRowWidth = useSharedValue(0)
 
     const indicatorX = useSharedValue(0)
     const indicatorW = useSharedValue(0)
+    const tabsHeight = useSharedValue(0)
+
+    const scrollHandler = useAnimatedScrollHandler({
+        onScroll: (event) => {
+            scrollY.value = event.contentOffset.y
+        },
+        onBeginDrag: () => {
+            isProgrammaticScroll.value = false
+            targetSection.value = -1
+        },
+    })
 
     const onSectionLayout = (index) => (e) => {
+        'worklet'
         const y = e.nativeEvent.layout.y
-        sectionTopsRef.current[index] = y
-        if (sectionYs[index]) {
-            sectionYs[index].value = index === 0 ? y : y
+        if (index === -2) {
+            tabsHeight.value = e.nativeEvent.layout.height
+        } else if (index >= 0) {
+            runOnJS((idx, val) => {
+                sectionTopsRef.current[idx] = val
+            })(index, y)
+
+            const newYs = [...sectionYs.value]
+            newYs[index] = y
+            sectionYs.value = newYs
         }
+    }
+
+    const scrollTabStrip = (index) => {
+        'worklet'
+        const metrics = tabMetrics.value[index]
+        const rowW = tabRowWidth.value
+        if (!metrics || metrics.width <= 0 || rowW <= 0) return
+
+        const centerTab = metrics.x + metrics.width / 2
+        const targetX = Math.max(0, centerTab - WINDOW.width / 2)
+        const maxScroll = Math.max(0, rowW - WINDOW.width)
+        scrollTo(tabsScrollRef, Math.min(targetX, maxScroll), 0, true)
     }
 
     useAnimatedReaction(
         () => {
-            const y = scrollY.value
-            let idx = 0
-            for (let i = 1; i < SECTIONS.length; i++) {
-                const top = sectionYs[i].value
-                if (top >= 0 && y >= top - SPY_INSET) idx = i
+            if (isProgrammaticScroll.value) {
+                return targetSection.value
             }
-            return idx
-        },
-        (idx, prev) => {
-            if (idx !== prev) {
-                runOnJS(setActiveSection)(idx)
+
+            const y = scrollY.value + tabsHeight.value + SPY_INSET
+            const ys = sectionYs.value
+
+            let currentIndex = 0
+
+            for (let i = 0; i < ys.length; i++) {
+                if (ys[i] !== -1 && ys[i] <= y) {
+                    currentIndex = i
+                }
             }
+
+            return currentIndex
         },
+        (current, prev) => {
+            if (current !== prev && current >= 0) {
+                runOnJS(setActiveSection)(current)
+            }
+        }
     )
 
-    const syncIndicator = useCallback((index) => {
-        const m = tabMetricsRef.current[index]
-        if (m && m.width > 0) {
-            indicatorX.value = withTiming(m.x, { duration: 200 })
-            indicatorW.value = withTiming(m.width, { duration: 200 })
+    useEffect(() => {
+        const metrics = tabMetrics.value[activeSection]
+
+        if (metrics?.width) {
+            indicatorX.value = withTiming(metrics.x, { duration: 220 })
+            indicatorW.value = withTiming(metrics.width, { duration: 220 })
+
+            runOnUI(scrollTabStrip)(activeSection)
         }
+    }, [activeSection])
+
+    const indicatorStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ translateX: indicatorX.value }],
+            width: indicatorW.value,
+        }
+    })
+
+    const scrollToSection = useCallback((index) => {
+        const y = sectionTopsRef.current[index]
+
+        if (y == null) return
+
+        isProgrammaticScroll.value = true
+        targetSection.value = index
+
+        setActiveSection(index)
+
+        const offset = Math.max(0, y - tabsHeight.value - SPY_INSET)
+
+        runOnUI((scrollYPos) => {
+            'worklet'
+            scrollTo(scrollRef, 0, scrollYPos, true)
+        })(offset)
     }, [])
 
-    const indicatorStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: indicatorX.value }],
-        width: indicatorW.value,
-    }))
-
-    useEffect(() => {
-        syncIndicator(activeSection)
-    }, [activeSection, syncIndicator])
-
-    const scrollTabStrip = useCallback(
-        (index) => {
-            const m = tabMetricsRef.current[index]
-            const rowW = tabRowWidthRef.current
-            if (!m || rowW <= 0) return
-            const centerTab = m.x + m.width / 2
-            const targetX = Math.max(0, centerTab - WINDOW.width / 2)
-            const maxScroll = Math.max(0, rowW - WINDOW.width)
-            scrollTo(tabsScrollRef, Math.min(targetX, maxScroll), 0, true)
-        },
-        [],
-    )
-
-    useEffect(() => {
-        scrollTabStrip(activeSection)
-    }, [activeSection, scrollTabStrip])
-
-    const onTabLayout = (index) => (e) => {
-        const { x, width } = e.nativeEvent.layout
-        tabMetricsRef.current[index] = { x, width }
-        if (index === activeSection) {
-            indicatorX.value = x
-            indicatorW.value = width
-        }
-    }
-
-    const onTabRowLayout = (e) => {
-        tabRowWidthRef.current = e.nativeEvent.layout.width
-    }
-
-    const scrollToSection = (index) => {
-        setActiveSection(index)
-        scrollTabStrip(index)
-        requestAnimationFrame(() => syncIndicator(index))
-
-        const tryScrollMain = (attempt) => {
-            const raw = sectionTopsRef.current[index]
-            const laidOut = raw != null && typeof raw === 'number' && raw >= 0
-
-            if (!laidOut) {
-                if (index === 0) {
-                    runOnUI(() => {
-                        'worklet'
-                        scrollTo(scrollRef, 0, 0, true)
-                    })()
-                    return
-                }
-                if (attempt < 16) {
-                    requestAnimationFrame(() => tryScrollMain(attempt + 1))
-                }
-                return
-            }
-
-            const offset = Math.max(0, raw)
-            runOnUI(() => {
-                'worklet'
-                scrollTo(scrollRef, 0, offset, true)
-            })()
-        }
-
-        InteractionManager.runAfterInteractions(() => {
-            tryScrollMain(0)
+    const listData = useMemo(() => {
+        const data = [{ type: 'banner_carousel' }, { type: 'tabs' }]
+        SECTIONS.forEach((section, sIndex) => {
+            data.push({
+                type: 'sectionStart',
+                section,
+                sectionIndex: sIndex,
+            })
         })
-    }
+        return data
+    }, [SECTIONS])
 
-    const data = [
-        { id: 1, image: Images.friedSlide1 },
-        { id: 2, image: Images.friedSlide2 },
-    ]
-
-    const sectionBody = (title, subtitle) => (
-        <>
-            <Typography size={18} fFamily="bold">
-                {title}
-            </Typography>
-            <Typography size={13} color={COLORS.grey} mT={6}>
-                {subtitle}
-            </Typography>
-        </>
-    )
-
-    return (
-        <View style={styles.screen}>
-            <HomeHeader />
-<<<<<<< HEAD
-            {/*
-             * Use ScrollView (not FlatList + ListHeaderComponent + one row): section
-             * onLayout y values must be in the same coordinate system as scrollTo offset.
-             * FlatList put sections inside a list cell, so layout.y missed the header height
-             * and tab jumps landed on the wrong section (e.g. Drinks → Desserts).
-             */}
-=======
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-            <Animated.ScrollView
-                ref={scrollRef}
-                style={styles.scroll}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                stickyHeaderIndices={[1]}
-<<<<<<< HEAD
-                bounces={false}
-            >
-=======
-            >
-                {/* [0] Scrolls away — banner */}
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-                <View onLayout={onSectionLayout(0)}>
+    const renderItem = useCallback(({ item, index }) => {
+        if (item.type === 'banner_carousel') {
+            const bannerData = [
+                { id: 1, image: Images.friedSlide1 },
+                { id: 2, image: Images.friedSlide2 },
+            ]
+            return (
+                <View style={styles.carouselWrapper}>
                     <Carousel
-                        width={WINDOW.width}
+                        width={WINDOW.width - Sizer.wSize(16)}
                         height={WINDOW.width / 2.4}
-                        data={data}
+                        data={bannerData}
                         loop
                         pagingEnabled
                         style={styles.carouselContainer}
-                        renderItem={({ item }) => (
-<<<<<<< HEAD
-                            <View
-                                key={item.id}
-                                style={styles.bannerContainer}
-                            >
-=======
-                            <View key={item.id} style={styles.bannerContainer}>
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
+                        renderItem={({ item: bItem }) => (
+                            <View key={bItem.id} style={styles.bannerContainer}>
                                 <ImageBackground
-                                    source={item.image}
+                                    source={bItem.image}
                                     style={styles.bannerImage}
                                     resizeMode="cover"
                                 />
@@ -234,149 +290,67 @@ const HomeScreen = () => {
                         )}
                     />
                 </View>
+            )
+        }
 
-<<<<<<< HEAD
-=======
-                {/* [1] Stays pinned under header once it reaches the top */}
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-                <View style={styles.stickyTabHost}>
-                    <Animated.ScrollView
-                        ref={tabsScrollRef}
-                        horizontal
-                        nestedScrollEnabled
-                        showsHorizontalScrollIndicator={false}
-                        bounces={false}
-                        contentContainerStyle={styles.tabScrollContent}
-                    >
-<<<<<<< HEAD
-                        <View
-                            style={styles.tabRow}
-                            onLayout={onTabRowLayout}
-                        >
-=======
-                        <View style={styles.tabRow} onLayout={onTabRowLayout}>
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-                            {SECTIONS.map((s, i) => (
-                                <Pressable
-                                    key={s.key}
-                                    style={styles.tab}
-                                    onPress={() => scrollToSection(i)}
-                                    onLayout={onTabLayout(i)}
-                                >
-                                    <Typography
-                                        size={12}
-<<<<<<< HEAD
-                                        fFamily={
-                                            activeSection === i
-                                                ? 'bold'
-                                                : 'medium'
-                                        }
-                                        color={
-                                            activeSection === i
-                                                ? COLORS.primary
-                                                : COLORS.grey
-                                        }
-=======
-                                        fFamily={activeSection === i ? 'bold' : 'medium'}
-                                        color={activeSection === i ? COLORS.primary : COLORS.grey}
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-                                    >
-                                        {s.title}
-                                    </Typography>
-                                </Pressable>
-                            ))}
-<<<<<<< HEAD
+        if (item.type === 'tabs') {
+            return (
+                <TabsRow
+                    sections={SECTIONS}
+                    activeSection={activeSection}
+                    onScrollTo={scrollToSection}
+                    onLayout={onSectionLayout(-2)}
+                    tabMetrics={tabMetrics}
+                    tabRowWidth={tabRowWidth}
+                    indicatorStyle={indicatorStyle}
+                    tabsScrollRef={tabsScrollRef}
+                />
+            )
+        }
 
-                            <Animated.View
-                                pointerEvents="none"
-                                style={[
-                                    styles.indicator,
-                                    indicatorStyle,
-                                ]}
-                            />
-=======
-                            <Animated.View pointerEvents="none" style={[styles.indicator, indicatorStyle]} />
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-                        </View>
-                    </Animated.ScrollView>
-                </View>
-
-                <View
-                    onLayout={onSectionLayout(1)}
-<<<<<<< HEAD
-                    style={[
-                        styles.section,
-                        { minHeight: WINDOW.height * 0.35 },
-                    ]}
-                >
-                    {sectionBody(
-                        'Popular near you',
-                        'Scroll spy tracks this block while you scroll.',
+        if (item.type === 'sectionStart') {
+            return (
+                <View onLayout={onSectionLayout(item.sectionIndex)}>
+                    {!!item.section.banner && (
+                        <SectionBanner banner={item.section.banner} />
                     )}
-=======
-                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
-                >
-                    {sectionBody('Popular near you', 'Scroll spy tracks this block while you scroll.')}
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-                </View>
 
-                <View
-                    onLayout={onSectionLayout(2)}
-<<<<<<< HEAD
-                    style={[
-                        styles.section,
-                        { minHeight: WINDOW.height * 0.35 },
-                    ]}
-                >
-                    {sectionBody(
-                        'Offers & deals',
-                        'Tap a tab above to jump here.',
-                    )}
-=======
-                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
-                >
-                    {sectionBody('Offers & deals', 'Tap a tab above to jump here.')}
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
+                    {item.section.items.map((product) => (
+                        <ProductCard
+                            key={product.item_id}
+                            product={product}
+                        />
+                    ))}
                 </View>
+            )
+        }
 
-                <View
-                    onLayout={onSectionLayout(3)}
-<<<<<<< HEAD
-                    style={[
-                        styles.section,
-                        { minHeight: WINDOW.height * 0.35 },
-                    ]}
-                >
-                    {sectionBody(
-                        'Desserts',
-                        'Horizontal tab bar scrolls when active tab changes.',
-                    )}
-=======
-                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
-                >
-                    {sectionBody('Desserts', 'Horizontal tab bar scrolls when the active tab changes.')}
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-                </View>
+        return null
+    }, [SECTIONS, activeSection, scrollToSection, indicatorStyle])
 
-                <View
-                    onLayout={onSectionLayout(4)}
-<<<<<<< HEAD
-                    style={[
-                        styles.section,
-                        { minHeight: WINDOW.height * 0.35 },
-                    ]}
-                >
-                    {sectionBody(
-                        'Drinks',
-                        'Tabs use Reanimated for underline animation.',
-                    )}
-=======
-                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
-                >
-                    {sectionBody('Drinks', 'Tabs use Reanimated for the underline and scrollTo.')}
->>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
-                </View>
-            </Animated.ScrollView>
+    return (
+        <View style={styles.screen}>
+            <HomeHeader />
+            <AnimatedFlatList
+                ref={scrollRef}
+                data={listData}
+                renderItem={renderItem}
+                keyExtractor={(item, index) => {
+                    if (item.type === 'tabs') return 'tabs'
+                    if (item.type === 'banner_carousel') return 'banner_carousel'
+                    if (item.type === 'sectionStart') return `section-${item.sectionIndex}`
+                    return index.toString()
+                }}
+                stickyHeaderIndices={[1]}
+                onScroll={scrollHandler}
+                onMomentumScrollEnd={() => {
+                    isProgrammaticScroll.value = false
+                    targetSection.value = -1
+                }}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+            />
         </View>
     )
 }
@@ -388,25 +362,40 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.white,
     },
+    carouselWrapper: {
+        paddingHorizontal: Sizer.wSize(8),
+        paddingVertical: Sizer.hSize(4),
+    },
+    carouselContainer: {
+        borderRadius: Sizer.fS(8),
+        overflow: 'hidden',
+    },
+    bannerContainer: {
+        width: '100%',
+        height: '100%',
+    },
+    bannerImage: {
+        width: '100%',
+        height: '100%',
+    },
     stickyTabHost: {
         backgroundColor: COLORS.white,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: COLORS.redLight,
-        zIndex: 2,
+        zIndex: 10,
+        borderBottomWidth: Sizer.hSize(1),
+        borderBottomColor: '#F5F5F5',
     },
     tabScrollContent: {
-        paddingHorizontal: Sizer.wSize(4),
-        paddingBottom: Sizer.hSize(2),
+        paddingHorizontal: Sizer.wSize(8),
     },
     tabRow: {
         flexDirection: 'row',
         alignItems: 'center',
         position: 'relative',
-        minHeight: Sizer.hSize(40),
+        minHeight: Sizer.hSize(48),
     },
     tab: {
-        paddingVertical: Sizer.hSize(10),
-        paddingHorizontal: Sizer.wSize(14),
+        paddingVertical: Sizer.hSize(12),
+        paddingHorizontal: Sizer.wSize(8),
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -414,31 +403,65 @@ const styles = StyleSheet.create({
         position: 'absolute',
         left: 0,
         bottom: 0,
-        height: Sizer.hSize(2.5),
+        height: Sizer.hSize(1),
         backgroundColor: COLORS.primary,
-        borderRadius: Sizer.fS(2),
-    },
-    scroll: {
-        flex: 1,
     },
     scrollContent: {
         paddingBottom: Sizer.hSize(24),
     },
-    bannerImage: {
-        width: '100%',
-        height: '100%',
+    section: {
+        paddingHorizontal: Sizer.wSize(8),
     },
-    carouselContainer: {
-        marginVertical: Sizer.hSize(2),
-    },
-    bannerContainer: {
-        borderRadius: Sizer.fS(10),
-        marginHorizontal: Sizer.wSize(2),
+    sectionBannerContainer: {
+        marginHorizontal: Sizer.wSize(8),
+        marginTop: Sizer.hSize(12),
+        marginBottom: Sizer.hSize(4),
+        height: Sizer.hSize(80),
+        borderRadius: Sizer.fS(12),
         overflow: 'hidden',
     },
-    section: {
-        paddingHorizontal: Sizer.wSize(6),
-        paddingTop: Sizer.hSize(16),
-        paddingBottom: Sizer.hSize(8),
+    sectionBannerImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: Sizer.fS(8),
+    },
+    itemCard: {
+        flexDirection: 'row',
+        backgroundColor: '#FFFFFF',
+        borderRadius: Sizer.fS(8),
+        marginVertical: Sizer.hSize(6),
+        padding: Sizer.wSize(12),
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    itemInfo: {
+        flex: 1,
+        marginRight: Sizer.wSize(12),
+    },
+    imageWrapper: {
+        position: 'relative',
+        width: Sizer.wSize(120),
+        height: Sizer.wSize(120),
+    },
+    itemImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: Sizer.fS(8),
+    },
+    addButton: {
+        position: 'absolute',
+        right: -Sizer.wSize(4),
+        bottom: -Sizer.hSize(4),
+        backgroundColor: COLORS.primary,
+        width: Sizer.wSize(28),
+        height: Sizer.wSize(28),
+        borderRadius: Sizer.wSize(14),
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 4,
     },
 })

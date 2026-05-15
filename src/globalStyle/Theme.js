@@ -16,8 +16,8 @@ export const statusBarHeight =
     Platform.OS === 'ios'
         ? Sizer.hSize(70)
         : StatusBar.currentHeight >= 34
-            ? Sizer.hSize(StatusBar.currentHeight + 10)
-            : Sizer.hSize(60);
+            ? Sizer.hSize(StatusBar.currentHeight)
+            : Sizer.hSize(30);
 
 const FONTS = {
     // GILROY

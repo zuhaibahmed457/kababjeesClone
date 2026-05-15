@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
     container: {
         backgroundColor: COLORS.primary,
 
-        paddingTop: statusBarHeight,
+        paddingTop: Sizer.hSize(30),
         paddingHorizontal: Sizer.wSize(6),
         borderBottomLeftRadius: Sizer.hSize(8),
         borderBottomRightRadius: Sizer.hSize(8),
@@ -61,6 +61,7 @@ const styles = StyleSheet.create({
     headerContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginBottom: Sizer.hSize(2)
     },
     leftContainer: {
         width: '33%',
