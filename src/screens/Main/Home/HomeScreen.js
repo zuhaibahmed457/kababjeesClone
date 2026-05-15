@@ -186,14 +186,20 @@ const HomeScreen = () => {
     return (
         <View style={styles.screen}>
             <HomeHeader />
+            {/*
+             * Use ScrollView (not FlatList + ListHeaderComponent + one row): section
+             * onLayout y values must be in the same coordinate system as scrollTo offset.
+             * FlatList put sections inside a list cell, so layout.y missed the header height
+             * and tab jumps landed on the wrong section (e.g. Drinks → Desserts).
+             */}
             <Animated.ScrollView
                 ref={scrollRef}
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
                 stickyHeaderIndices={[1]}
+                bounces={false}
             >
-                {/* [0] Scrolls away — banner */}
                 <View onLayout={onSectionLayout(0)}>
                     <Carousel
                         width={WINDOW.width}
@@ -203,7 +209,10 @@ const HomeScreen = () => {
                         pagingEnabled
                         style={styles.carouselContainer}
                         renderItem={({ item }) => (
-                            <View key={item.id} style={styles.bannerContainer}>
+                            <View
+                                key={item.id}
+                                style={styles.bannerContainer}
+                            >
                                 <ImageBackground
                                     source={item.image}
                                     style={styles.bannerImage}
@@ -214,7 +223,6 @@ const HomeScreen = () => {
                     />
                 </View>
 
-                {/* [1] Stays pinned under header once it reaches the top */}
                 <View style={styles.stickyTabHost}>
                     <Animated.ScrollView
                         ref={tabsScrollRef}
@@ -224,7 +232,10 @@ const HomeScreen = () => {
                         bounces={false}
                         contentContainerStyle={styles.tabScrollContent}
                     >
-                        <View style={styles.tabRow} onLayout={onTabRowLayout}>
+                        <View
+                            style={styles.tabRow}
+                            onLayout={onTabRowLayout}
+                        >
                             {SECTIONS.map((s, i) => (
                                 <Pressable
                                     key={s.key}
@@ -234,44 +245,83 @@ const HomeScreen = () => {
                                 >
                                     <Typography
                                         size={12}
-                                        fFamily={activeSection === i ? 'bold' : 'medium'}
-                                        color={activeSection === i ? COLORS.primary : COLORS.grey}
+                                        fFamily={
+                                            activeSection === i
+                                                ? 'bold'
+                                                : 'medium'
+                                        }
+                                        color={
+                                            activeSection === i
+                                                ? COLORS.primary
+                                                : COLORS.grey
+                                        }
                                     >
                                         {s.title}
                                     </Typography>
                                 </Pressable>
                             ))}
-                            <Animated.View pointerEvents="none" style={[styles.indicator, indicatorStyle]} />
+
+                            <Animated.View
+                                pointerEvents="none"
+                                style={[
+                                    styles.indicator,
+                                    indicatorStyle,
+                                ]}
+                            />
                         </View>
                     </Animated.ScrollView>
                 </View>
 
                 <View
                     onLayout={onSectionLayout(1)}
-                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
+                    style={[
+                        styles.section,
+                        { minHeight: WINDOW.height * 0.35 },
+                    ]}
                 >
-                    {sectionBody('Popular near you', 'Scroll spy tracks this block while you scroll.')}
+                    {sectionBody(
+                        'Popular near you',
+                        'Scroll spy tracks this block while you scroll.',
+                    )}
                 </View>
 
                 <View
                     onLayout={onSectionLayout(2)}
-                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
+                    style={[
+                        styles.section,
+                        { minHeight: WINDOW.height * 0.35 },
+                    ]}
                 >
-                    {sectionBody('Offers & deals', 'Tap a tab above to jump here.')}
+                    {sectionBody(
+                        'Offers & deals',
+                        'Tap a tab above to jump here.',
+                    )}
                 </View>
 
                 <View
                     onLayout={onSectionLayout(3)}
-                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
+                    style={[
+                        styles.section,
+                        { minHeight: WINDOW.height * 0.35 },
+                    ]}
                 >
-                    {sectionBody('Desserts', 'Horizontal tab bar scrolls when the active tab changes.')}
+                    {sectionBody(
+                        'Desserts',
+                        'Horizontal tab bar scrolls when active tab changes.',
+                    )}
                 </View>
 
                 <View
                     onLayout={onSectionLayout(4)}
-                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
+                    style={[
+                        styles.section,
+                        { minHeight: WINDOW.height * 0.35 },
+                    ]}
                 >
-                    {sectionBody('Drinks', 'Tabs use Reanimated for the underline and scrollTo.')}
+                    {sectionBody(
+                        'Drinks',
+                        'Tabs use Reanimated for underline animation.',
+                    )}
                 </View>
             </Animated.ScrollView>
         </View>
