@@ -186,20 +186,28 @@ const HomeScreen = () => {
     return (
         <View style={styles.screen}>
             <HomeHeader />
+<<<<<<< HEAD
             {/*
              * Use ScrollView (not FlatList + ListHeaderComponent + one row): section
              * onLayout y values must be in the same coordinate system as scrollTo offset.
              * FlatList put sections inside a list cell, so layout.y missed the header height
              * and tab jumps landed on the wrong section (e.g. Drinks → Desserts).
              */}
+=======
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
             <Animated.ScrollView
                 ref={scrollRef}
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
                 stickyHeaderIndices={[1]}
+<<<<<<< HEAD
                 bounces={false}
             >
+=======
+            >
+                {/* [0] Scrolls away — banner */}
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                 <View onLayout={onSectionLayout(0)}>
                     <Carousel
                         width={WINDOW.width}
@@ -209,10 +217,14 @@ const HomeScreen = () => {
                         pagingEnabled
                         style={styles.carouselContainer}
                         renderItem={({ item }) => (
+<<<<<<< HEAD
                             <View
                                 key={item.id}
                                 style={styles.bannerContainer}
                             >
+=======
+                            <View key={item.id} style={styles.bannerContainer}>
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                                 <ImageBackground
                                     source={item.image}
                                     style={styles.bannerImage}
@@ -223,6 +235,10 @@ const HomeScreen = () => {
                     />
                 </View>
 
+<<<<<<< HEAD
+=======
+                {/* [1] Stays pinned under header once it reaches the top */}
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                 <View style={styles.stickyTabHost}>
                     <Animated.ScrollView
                         ref={tabsScrollRef}
@@ -232,10 +248,14 @@ const HomeScreen = () => {
                         bounces={false}
                         contentContainerStyle={styles.tabScrollContent}
                     >
+<<<<<<< HEAD
                         <View
                             style={styles.tabRow}
                             onLayout={onTabRowLayout}
                         >
+=======
+                        <View style={styles.tabRow} onLayout={onTabRowLayout}>
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                             {SECTIONS.map((s, i) => (
                                 <Pressable
                                     key={s.key}
@@ -245,6 +265,7 @@ const HomeScreen = () => {
                                 >
                                     <Typography
                                         size={12}
+<<<<<<< HEAD
                                         fFamily={
                                             activeSection === i
                                                 ? 'bold'
@@ -255,11 +276,16 @@ const HomeScreen = () => {
                                                 ? COLORS.primary
                                                 : COLORS.grey
                                         }
+=======
+                                        fFamily={activeSection === i ? 'bold' : 'medium'}
+                                        color={activeSection === i ? COLORS.primary : COLORS.grey}
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                                     >
                                         {s.title}
                                     </Typography>
                                 </Pressable>
                             ))}
+<<<<<<< HEAD
 
                             <Animated.View
                                 pointerEvents="none"
@@ -268,12 +294,16 @@ const HomeScreen = () => {
                                     indicatorStyle,
                                 ]}
                             />
+=======
+                            <Animated.View pointerEvents="none" style={[styles.indicator, indicatorStyle]} />
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                         </View>
                     </Animated.ScrollView>
                 </View>
 
                 <View
                     onLayout={onSectionLayout(1)}
+<<<<<<< HEAD
                     style={[
                         styles.section,
                         { minHeight: WINDOW.height * 0.35 },
@@ -283,10 +313,16 @@ const HomeScreen = () => {
                         'Popular near you',
                         'Scroll spy tracks this block while you scroll.',
                     )}
+=======
+                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
+                >
+                    {sectionBody('Popular near you', 'Scroll spy tracks this block while you scroll.')}
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                 </View>
 
                 <View
                     onLayout={onSectionLayout(2)}
+<<<<<<< HEAD
                     style={[
                         styles.section,
                         { minHeight: WINDOW.height * 0.35 },
@@ -296,10 +332,16 @@ const HomeScreen = () => {
                         'Offers & deals',
                         'Tap a tab above to jump here.',
                     )}
+=======
+                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
+                >
+                    {sectionBody('Offers & deals', 'Tap a tab above to jump here.')}
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                 </View>
 
                 <View
                     onLayout={onSectionLayout(3)}
+<<<<<<< HEAD
                     style={[
                         styles.section,
                         { minHeight: WINDOW.height * 0.35 },
@@ -309,10 +351,16 @@ const HomeScreen = () => {
                         'Desserts',
                         'Horizontal tab bar scrolls when active tab changes.',
                     )}
+=======
+                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
+                >
+                    {sectionBody('Desserts', 'Horizontal tab bar scrolls when the active tab changes.')}
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                 </View>
 
                 <View
                     onLayout={onSectionLayout(4)}
+<<<<<<< HEAD
                     style={[
                         styles.section,
                         { minHeight: WINDOW.height * 0.35 },
@@ -322,6 +370,11 @@ const HomeScreen = () => {
                         'Drinks',
                         'Tabs use Reanimated for underline animation.',
                     )}
+=======
+                    style={[styles.section, { minHeight: WINDOW.height * 0.35 }]}
+                >
+                    {sectionBody('Drinks', 'Tabs use Reanimated for the underline and scrollTo.')}
+>>>>>>> d0e411cd955fd7789e0a9e5709b2a3103cbba483
                 </View>
             </Animated.ScrollView>
         </View>
